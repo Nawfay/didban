@@ -2,6 +2,8 @@ module github/nawfay/didban
 
 go 1.23.1
 
+require golang.org/x/crypto v0.39.0
+
 require (
 	github.com/aws/aws-sdk-go v1.55.7 // indirect
 	github.com/bitly/go-simplejson v0.5.1 // indirect

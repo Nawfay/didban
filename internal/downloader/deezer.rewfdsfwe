@@ -1,0 +1,281 @@
+// package downloader
+
+// import (
+// 	"context"
+// 	"errors"
+// 	"fmt"
+// 	"io"
+// 	"os"
+// 	"path"
+// 	"sync"
+// 	"time"
+
+// 	"golang.org/x/crypto/blowfish"
+// 	"crypto/cipher"
+// 	"crypto/md5"
+
+// 	"github.com/mathismqn/godeez/internal/deezer"
+// 	"github.com/mathismqn/godeez/internal/fileutil"
+// 	"github.com/mathismqn/godeez/internal/store"
+// 	"github.com/mathismqn/godeez/internal/tags"
+// )
+
+
+
+
+
+
+// var iv = []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07}
+
+// func GetKey(secretKey, songID string) []byte {
+// 	hash := md5.Sum([]byte(songID))
+// 	hashHex := fmt.Sprintf("%x", hash)
+
+// 	key := []byte(secretKey)
+// 	for i := 0; i < len(hash); i++ {
+// 		key[i] = key[i] ^ hashHex[i] ^ hashHex[i+16]
+// 	}
+
+// 	return key
+// }
+
+// func Decrypt(data, key []byte) ([]byte, error) {
+// 	block, err := blowfish.NewCipher(key)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	mode := cipher.NewCBCDecrypter(block, iv)
+// 	decrypted := make([]byte, len(data))
+// 	mode.CryptBlocks(decrypted, data)
+
+// 	return decrypted, nil
+// }
+
+
+
+// const chunkSize = 2048
+
+// type Client struct {
+// 	appConfig    *config.Config
+// 	resourceType string
+// 	deezerClient *deezer.Client
+
+// 	hashIndexOnce sync.Once
+// 	hashIndex     *fileutil.HashIndex
+// 	hashIndexErr  error
+// }
+
+// func New(appConfig *config.Config, resourceType string) *Client {
+// 	return &Client{
+// 		appConfig:    appConfig,
+// 		resourceType: resourceType,
+// 		deezerClient: nil,
+// 	}
+// }
+
+// type Media struct {
+// 	Errors []MediaError `json:"errors"`
+// 	Data   []struct {
+// 		Media []struct {
+// 			Type    string   `json:"media_type"`
+// 			Cipher  Cipher   `json:"cipher"`
+// 			Format  string   `json:"format"`
+// 			Sources []Source `json:"sources"`
+// 		}
+// 		Errors []MediaError `json:"errors"`
+// 	} `json:"data"`
+// }
+
+
+// func (c *Client) FetchMedia(ctx context.Context, song *Song, quality string) (*Media, error) {
+// 	var formats string
+
+// 	switch quality {
+// 	case "mp3_128":
+// 		formats = `[{"cipher":"BF_CBC_STRIPE","format":"MP3_128"}]`
+// 	case "mp3_320":
+// 		formats = `[{"cipher":"BF_CBC_STRIPE","format":"MP3_320"}]`
+// 	case "flac":
+// 		formats = `[{"cipher":"BF_CBC_STRIPE","format":"FLAC"}]`
+// 	case "best":
+// 		formats = `[{"cipher":"BF_CBC_STRIPE","format":"FLAC"},{"cipher":"BF_CBC_STRIPE","format":"MP3_320"},{"cipher":"BF_CBC_STRIPE","format":"MP3_128"}]`
+// 	}
+
+// 	reqBody := fmt.Sprintf(`{"license_token":"%s","media":[{"type":"FULL","formats":%s}],"track_tokens":["%s"]}`, c.Session.LicenseToken, formats, song.TrackToken)
+// 	req, err := http.NewRequestWithContext(ctx, "POST", "https://media.deezer.com/v1/get_url", bytes.NewBuffer([]byte(reqBody)))
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	resp, err := c.Session.HttpClient.Do(req)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	defer resp.Body.Close()
+
+// 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusBadRequest {
+// 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+// 	}
+
+// 	body, err := io.ReadAll(resp.Body)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	var media Media
+// 	err = json.Unmarshal(body, &media)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	if len(media.Errors) > 0 {
+// 		if media.Errors[0].Code == 1000 {
+// 			return nil, fmt.Errorf("invalid license token")
+// 		}
+
+// 		return nil, fmt.Errorf("%s", media.Errors[0].Message)
+// 	}
+// 	if len(media.Data) > 0 && len(media.Data[0].Errors) > 0 {
+// 		if media.Data[0].Errors[0].Code == 2002 {
+// 			return nil, fmt.Errorf("invalid track token")
+// 		}
+
+// 		return nil, fmt.Errorf("%s", media.Data[0].Errors[0].Message)
+// 	}
+
+// 	return &media, nil
+// }
+
+// func (c *Client) downloadSong(ctx context.Context, resource deezer.Resource, song *deezer.Song, opts Options, outputDir string) ([]string, error) {
+// 	var warnings []string
+
+// 	media, err := c.deezerClient.FetchMedia(ctx, song, opts.Quality)
+// 	if err != nil {
+// 		return warnings, fmt.Errorf("failed to fetch media: %w", err)
+// 	}
+
+// 	fileName := song.GetFileName(c.resourceType, song, media)
+// 	outputPath := path.Join(outputDir, fileName)
+
+// 	mediaFormat, err := media.GetFormat()
+// 	if err != nil {
+// 		return warnings, fmt.Errorf("failed to get media format: %w", err)
+// 	}
+
+// 	if path, skip := c.shouldSkipDownload(ctx, song.ID, mediaFormat); skip {
+// 		return warnings, SkipError{Path: path}
+// 	}
+
+
+// 	stream, err := c.deezerClient.GetMediaStream(ctx, media, song.ID)
+// 	if err != nil {
+// 		return warnings, fmt.Errorf("failed to get media stream: %w", err)
+// 	}
+
+// 	dlCtx, cancel := context.WithTimeout(ctx, opts.Timeout)
+// 	defer cancel()
+
+// 	key := crypto.GetKey(c.appConfig.SecretKey, song.ID)
+// 	if err := c.streamToFile(dlCtx, stream, outputPath, key); err != nil {
+// 		fileutil.DeleteFile(outputPath)
+
+// 		return warnings, fmt.Errorf("failed to stream to file: %w", err)
+// 	}
+
+
+
+// 	return warnings, nil
+// }
+
+// func (c *Client) streamToFile(ctx context.Context, stream io.ReadCloser, outputPath string, key []byte) error {
+// 	defer stream.Close()
+
+// 	file, err := os.Create(outputPath)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer file.Close()
+
+// 	buffer := make([]byte, chunkSize)
+// 	for chunk := 0; ; chunk++ {
+// 		select {
+// 		case <-ctx.Done():
+// 			return ctx.Err()
+// 		default:
+// 			// continue
+// 		}
+
+// 		totalRead := 0
+// 		for totalRead < chunkSize {
+// 			n, err := stream.Read(buffer[totalRead:])
+// 			if err != nil {
+// 				if errors.Is(err, io.EOF) {
+// 					break
+// 				}
+// 				return err
+// 			}
+
+// 			if n > 0 {
+// 				totalRead += n
+// 			}
+// 		}
+
+// 		if totalRead == 0 {
+// 			break
+// 		}
+
+// 		if chunk%3 == 0 && totalRead == chunkSize {
+// 			buffer, err = crypto.Decrypt(buffer, key)
+// 			if err != nil {
+// 				return err
+// 			}
+// 		}
+
+// 		_, err = file.Write(buffer[:totalRead])
+// 		if err != nil {
+// 			return err
+// 		}
+
+// 		if totalRead < chunkSize {
+// 			break
+// 		}
+// 	}
+
+// 	return nil
+// }
+
+// func (c *Client) finalizeDownload(resource deezer.Resource, song *deezer.Song, outputPath, mediaFormat string, cover []byte, metrics *bpm.Metrics) []string {
+// 	var warnings []string
+
+// 	if err := tags.AddTags(resource, song, cover, outputPath, metrics.BPM, metrics.Key); err != nil {
+// 		warnings = append(warnings, fmt.Sprintf("failed to add tags: %v", err))
+// 	}
+
+// 	hash, err := fileutil.GetFileHash(outputPath)
+// 	if err != nil {
+// 		warnings = append(warnings, fmt.Sprintf("failed to get file hash: %v", err))
+// 	}
+
+// 	info := &store.DownloadInfo{
+// 		SongID:     song.ID,
+// 		Quality:    mediaFormat,
+// 		Path:       outputPath,
+// 		Hash:       hash,
+// 		Downloaded: time.Now(),
+// 	}
+
+// 	if err := info.Save(); err != nil {
+// 		warnings = append(warnings, fmt.Sprintf("failed to save download info: %v", err))
+// 	}
+
+// 	return warnings
+// }
+
+// func (c *Client) initHashIndex(ctx context.Context) error {
+// 	c.hashIndexOnce.Do(func() {
+// 		c.hashIndex, c.hashIndexErr = fileutil.NewHashIndex(ctx, c.appConfig.OutputDir)
+// 	})
+
+// 	return c.hashIndexErr
+// }
