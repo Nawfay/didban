@@ -1,41 +1,27 @@
-// package main
-
-// import (
-// 	// "github/nawfay/didban/internal/logic"
-// 	// "fmt"
-
-// 	"github/nawfay/didban/internal/downloader"
-// )
-
-
-// func main() {
-
-// 	// tmp, _ := logic.DeezerToYtResolver(3135556)
-// 	// fmt.Println(tmp)
-	
-// 	downloader.ExampleClient()
-// }
-
+// main.go
 package main
 
 import (
-	"context"
 	"log"
-	"time"
 
-	deezer"github/nawfay/didban/internal/downloader"
+	"github/nawfay/didban/internal/downloader"
 )
 
 func main() {
-	// Make sure DEEZER_ARL is exported in your shell:
-	// export DEEZER_ARL="your_arl_cookie_here"
+	// 1) Hard-code your ARL here for testing:
+	const myARL = "7ed297081270075398f7eaa1745457959452149c482f7ae4842be8f49dc7c3f127080b5da34ec0e2717f7bd5742d4211e4c71149ff3c0f8b7a8cdcc0854460b553b1d5b9bf841207771a0f4942ab7ed511c322fc6520a1b800da88fe67d3ff61"
 
-	// Download in a 5 min context
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	if err := deezer.DownloadTrack(ctx, "2864040362", "320", "mytrack.mp3"); err != nil {
-		log.Fatal(err)
+	// 2) Bootstrap auth (fetches a fresh license_token):
+	if err := downloader.SetARLCookie(myARL); err != nil {
+		log.Fatalf("Auth setup failed: %v", err)
 	}
-	log.Println("Download complete!")
+
+	// 3) Download a track (FLAC/320/128 all supported):
+	trackID := "2864040362"
+	output  := "mytrack.mp3"
+
+	if err := downloader.DownloadTrack(trackID, output); err != nil {
+		log.Fatalf("Download failed: %v", err)
+	}
+	log.Println("Download complete:", output)
 }

@@ -1,99 +1,171 @@
+// downloader/downloader.go
 package downloader
 
 import (
 	"bytes"
 	"crypto/cipher"
 	"crypto/md5"
-	// "encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/blowfish"
 )
 
+// Config holds your ARL cookie (for testing), the fetched license token,
+// and the Blowfish secret/IV used to decrypt Deezer’s stream.
 var Config = struct {
 	ARLCookie      string
 	LicenseToken   string
 	BlowfishSecret string
 	BlowfishIV     string
 }{
-	ARLCookie:      "7ed297081270075398f7eaa1745457959452149c482f7ae4842be8f49dc7c3f127080b5da34ec0e2717f7bd5742d4211e4c71149ff3c0f8b7a8cdcc0854460b553b1d5b9bf841207771a0f4942ab7ed511c322fc6520a1b800da88fe67d3ff61",
-	LicenseToken:   "AAAAAmfW8uBn6rlgFo2SPQeagYjuPVCJto7VYRu51OK45xKOAzOjJZYbDG7nFTHL5wH9_Vljve40tlcG7fR8wY80vEI2dapH4TYvkAHo-qirmXkwtbNIGFA8xzc",
+	ARLCookie:      "",
+	LicenseToken:   "",
 	BlowfishSecret: "g4el58wc0zvf9na1",
 	BlowfishIV:     "0001020304050607",
 }
 
-type Song struct {
-	ID         int    json:"id"
-	TrackToken string json:"track_token"
-	Title      string json:"title"
-	Artist     struct {
-		Name string json:"name"
-	} json:"artist"
+// ─── Auth Bootstrap ────────────────────────────────────────────────────────────
+
+// getUserDataResponse matches Deezer’s getUserData JSON envelope.
+type getUserDataResponse struct {
+	Results struct {
+		User struct {
+			Options struct {
+				LicenseToken string `json:"license_token"`
+			} `json:"options"`
+		} `json:"user"`
+	} `json:"results"`
 }
 
+// fetchLicenseToken posts your ARL to Deezer and returns a fresh license_token + sid.
+func fetchLicenseToken(arl string) (licenseToken, sid string, err error) {
+	const url = "https://www.deezer.com/ajax/gw-light.php?method=deezer.getUserData&input=3&api_version=1.0&api_token=null"
+	req, err := http.NewRequest("POST", url, strings.NewReader("{}"))
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "arl", Value: arl})
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+
+	var body getUserDataResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", "", fmt.Errorf("decode getUserData JSON: %w", err)
+	}
+
+	// grab the 'sid' cookie if you ever need it
+	for _, c := range resp.Cookies() {
+		if c.Name == "sid" {
+			sid = c.Value
+			break
+		}
+	}
+	if sid == "" {
+		return "", "", fmt.Errorf("sid cookie not found")
+	}
+
+	return body.Results.User.Options.LicenseToken, sid, nil
+}
+
+// SetARLCookie hard-codes your ARL and fetches+stores a valid license_token.
+func SetARLCookie(arl string) error {
+	lt, _, err := fetchLicenseToken(arl)
+	if err != nil {
+		return fmt.Errorf("unable to fetch license_token: %w", err)
+	}
+	Config.ARLCookie = arl
+	Config.LicenseToken = lt
+	return nil
+}
+
+// ─── Data Models ──────────────────────────────────────────────────────────────
+
+// Song holds the minimal metadata we need from the public API.
+type Song struct {
+	ID         int    `json:"id"`
+	TrackToken string `json:"track_token"`
+	Title      string `json:"title"`
+	Artist     struct {
+		Name string `json:"name"`
+	} `json:"artist"`
+}
+
+// MediaResponse models the v1/get_url response.
 type MediaResponse struct {
 	Data []struct {
 		Media []struct {
 			Sources []struct {
-				URL      string json:"url"
-				Provider string json:"provider" // Added field for provider
-			} json:"sources"
-		} json:"media"
+				URL      string `json:"url"`
+				Provider string `json:"provider"`
+			} `json:"sources"`
+		} `json:"media"`
 		Errors []struct {
-			Code    int    json:"code"
-			Message string json:"message"
-		} json:"errors"
-	} json:"data"
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"errors"`
+	} `json:"data"`
 	Errors []struct {
-		Code    int    json:"code"
-		Message string json:"message"
-	} json:"errors"
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	} `json:"errors"`
 }
 
-func DownloadTrack(trackID string, outputPath string) error {
+// ─── Public API ────────────────────────────────────────────────────────────────
+
+// DownloadTrack retrieves and decrypts a full Deezer track (FLAC/320/128).
+// trackID is the Deezer track ID; outputPath is the destination file.
+func DownloadTrack(trackID, outputPath string) error {
+	// 1) fetch public metadata + track_token
 	song, err := getTrackMetadata(trackID)
 	if err != nil {
 		return fmt.Errorf("metadata error: %w", err)
 	}
 
+	// 2) fetch encrypted source URLs
 	media, err := getMediaURL(song)
 	if err != nil {
 		return fmt.Errorf("media error: %w", err)
 	}
 
-	fmt.Println(media)
-
-	if len(media.Data) == 0 || len(media.Data[0].Media) == 0 || len(media.Data[0].Media[0].Sources) == 0 {
+	// 3) pick a URL (prefer provider "ak")
+	if len(media.Data) == 0 ||
+		len(media.Data[0].Media) == 0 ||
+		len(media.Data[0].Media[0].Sources) == 0 {
 		return fmt.Errorf("no media URL found")
 	}
-
-	// Choose the URL, prioritizing the source with Provider "ak"
 	url := media.Data[0].Media[0].Sources[0].URL
-	for _, source := range media.Data[0].Media[0].Sources {
-		if source.Provider == "ak" {
-			url = source.URL
+	for _, src := range media.Data[0].Media[0].Sources {
+		if src.Provider == "ak" {
+			url = src.URL
 			break
 		}
 	}
 
-	fmt.Println(url)
-
-	return downloadAndDecrypt(
-		url,
-		outputPath,
-		song.ID,
-	)
+	// 4) download & decrypt
+	return downloadAndDecrypt(url, outputPath, song.ID)
 }
 
+// ─── Internal Helpers ─────────────────────────────────────────────────────────
 
+// getTrackMetadata calls the public API and reads track_token.
 func getTrackMetadata(trackID string) (*Song, error) {
-	req, _ := http.NewRequest("GET", fmt.Sprintf("https://api.deezer.com/track/%s", trackID), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("https://api.deezer.com/track/%s", trackID), nil)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Add("Cookie", "arl="+Config.ARLCookie)
 
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -102,112 +174,87 @@ func getTrackMetadata(trackID string) (*Song, error) {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned %d status", resp.StatusCode)
+		return nil, fmt.Errorf("API returned %d", resp.StatusCode)
 	}
 
 	var song Song
 	if err := json.NewDecoder(resp.Body).Decode(&song); err != nil {
 		return nil, fmt.Errorf("JSON decode failed: %w", err)
 	}
-
 	if song.TrackToken == "" {
-		return nil, fmt.Errorf("invalid track token in response")
+		return nil, fmt.Errorf("invalid track token")
 	}
-
 	return &song, nil
 }
 
+// getMediaURL posts to /v1/get_url with your license_token + track_token.
 func getMediaURL(song *Song) (*MediaResponse, error) {
-	payload := fmt.Sprintf({
-		"license_token": "%s",
-		"media": [{"type": "FULL", "formats": [{"cipher":"BF_CBC_STRIPE","format":"FLAC"},{"cipher":"BF_CBC_STRIPE","format":"MP3_320"},{"cipher":"BF_CBC_STRIPE","format":"MP3_128"}]}],
-		"track_tokens": ["%s"]
-	}, Config.LicenseToken, song.TrackToken)
-
-	reqBody := []byte(payload)
-	resp, err := http.Post("https://media.deezer.com/v1/get_url", "application/json", bytes.NewBuffer(reqBody))
+	payload := fmt.Sprintf(
+		`{"license_token":"%s","media":[{"type":"FULL","formats":[{"cipher":"BF_CBC_STRIPE","format":"FLAC"},{"cipher":"BF_CBC_STRIPE","format":"MP3_320"},{"cipher":"BF_CBC_STRIPE","format":"MP3_128"}]}],"track_tokens":["%s"]}`,
+		Config.LicenseToken, song.TrackToken,
+	)
+	resp, err := http.Post("https://media.deezer.com/v1/get_url", "application/json", bytes.NewBufferString(payload))
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
 
 	var media MediaResponse
-	if err := json.Unmarshal(body, &media); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&media); err != nil {
 		return nil, fmt.Errorf("JSON decode failed: %w", err)
 	}
-
 	if len(media.Errors) > 0 {
 		return nil, fmt.Errorf("API error: %s (code %d)", media.Errors[0].Message, media.Errors[0].Code)
 	}
-
 	return &media, nil
 }
 
-const ChunkSize = 2048
+const chunkSize = 2048
 
-func downloadAndDecrypt(url, path string, trackID int) error {
-    resp, err := http.Get(url)
-    if err != nil {
-        return fmt.Errorf("download failed: %w", err)
-    }
-    defer resp.Body.Close()
+// downloadAndDecrypt streams in 2 048-byte chunks, decrypting every 3rd one.
+func downloadAndDecrypt(url, outPath string, trackID int) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP error %d", resp.StatusCode)
+	}
 
-    if resp.StatusCode != http.StatusOK {
-        return fmt.Errorf("HTTP error %d", resp.StatusCode)
-    }
+	f, err := os.Create(outPath)
+	if err != nil {
+		return fmt.Errorf("file creation failed: %w", err)
+	}
+	defer f.Close()
 
-    file, err := os.Create(path)
-    if err != nil {
-        return fmt.Errorf("file creation failed: %w", err)
-    }
-    defer file.Close()
-
-    // Define the chunk size (must be divisible by blowfish.BlockSize, e.g., 8)
-    // const ChunkSize = 2048
-
-	trackIDStr := fmt.Sprintf("%d", trackID)
-	// key := generateBlowfishKey(trackIDStr)
-
-
-    key := generateBlowfishKey(trackIDStr)
-    buffer := make([]byte, ChunkSize)
-
+	key := generateBlowfishKey(fmt.Sprintf("%d", trackID))
+	buf := make([]byte, chunkSize)
 	for chunk := 0; ; chunk++ {
-		totalRead := 0
-		for totalRead < ChunkSize {
-			n, err := resp.Body.Read(buffer[totalRead:])
-			if err != nil {
-				if err.Error() == "EOF" {
-					break
-				}
-				return err
-			}
-
-			if n > 0 {
-				totalRead += n
-			}
+		// read up to chunkSize
+		n, rerr := io.ReadFull(resp.Body, buf)
+		if rerr != nil && rerr != io.ErrUnexpectedEOF && rerr != io.EOF {
+			return rerr
 		}
-
-		if totalRead == 0 {
+		if n == 0 {
 			break
 		}
+		data := buf[:n]
 
-		if chunk%3 == 0 && totalRead == ChunkSize {
-			buffer, err = DecryptBlowfish(buffer, key)
-			if err != nil {
-				return err
+		// decrypt every 3rd full chunk
+		if chunk%3 == 0 && n == chunkSize {
+			dec, derr := DecryptBlowfish(data, key)
+			if derr != nil {
+				return derr
 			}
+			data = dec
 		}
 
-		_, err = file.Write(buffer[:totalRead])
-		if err != nil {
-			return err
+		if _, werr := f.Write(data); werr != nil {
+			return werr
 		}
-
-		if totalRead < ChunkSize {
+		if rerr == io.ErrUnexpectedEOF || rerr == io.EOF {
 			break
 		}
 	}
@@ -215,35 +262,30 @@ func downloadAndDecrypt(url, path string, trackID int) error {
 	return nil
 }
 
+// DecryptBlowfish decrypts a full chunk using CBC with your IV.
 func DecryptBlowfish(data, key []byte) ([]byte, error) {
 	block, err := blowfish.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
-
 	iv, err := hex.DecodeString(Config.BlowfishIV)
 	if err != nil {
 		return nil, err
 	}
-
 	mode := cipher.NewCBCDecrypter(block, iv)
-	decrypted := make([]byte, len(data))
-	mode.CryptBlocks(decrypted, data)
-
-	return decrypted, nil
+	dst := make([]byte, len(data))
+	mode.CryptBlocks(dst, data)
+	return dst, nil
 }
+
+// generateBlowfishKey derives the 16-byte key via md5(songID) ⊕ secret.
 func generateBlowfishKey(songID string) []byte {
-	hash := md5.Sum([]byte(songID))
-	hashHex := fmt.Sprintf("%x", hash)
-
-	key := []byte(Config.BlowfishSecret)
-	for i := 0; i < len(hash); i++ {
-		key[i] = key[i] ^ hashHex[i] ^ hashHex[i+16]
+	sum := md5.Sum([]byte(songID))
+	hexStr := fmt.Sprintf("%x", sum[:])
+	secret := []byte(Config.BlowfishSecret)
+	key := make([]byte, 16)
+	for i := 0; i < 16; i++ {
+		key[i] = secret[i] ^ hexStr[i] ^ hexStr[i+16]
 	}
-
-	fmt.Println(key)
-
 	return key
 }
-
-
