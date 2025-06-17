@@ -2,18 +2,19 @@ package utils
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"github.com/bogem/id3v2/v2"
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 )
 
 // ConvertToMP4 rewraps any input video as MP4 container
-func ConvertToMP4(input, output string) error {
+func ConvertToMP4(input, output string, duration string) error {
 	return ffmpeg_go.
 		Input(input).
 		Output(output, ffmpeg_go.KwArgs{
-			"c":        "copy",
+			// "c":        "copy",
+            "t": duration,
 			"movflags": "+faststart", // for web compatibility
 		}).
 		OverWriteOutput().
@@ -35,7 +36,7 @@ func TagMP3(mp3Path, coverPath, title, artist, album, year string) error {
     tag.AddTextFrame(tag.CommonID("Year"), tag.DefaultEncoding(), year)
 
     // Load cover image from disk
-    picBytes, err := ioutil.ReadFile(coverPath)
+    picBytes, err := os.ReadFile(coverPath)
     if err != nil {
         return fmt.Errorf("error reading cover image: %w", err)
     }

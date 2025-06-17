@@ -25,3 +25,4 @@ func DeezerToYtResolver(deezerId int) (string, error) {
 
 	return ytString[0], nil
 }
+

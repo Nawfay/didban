@@ -1,7 +1,8 @@
 package utils
 
-
 import (
+	"net/http"
+	"os"
 	"regexp"
 	"strings"
 )
@@ -24,4 +25,23 @@ func NormalizeString(name string) string {
 	name = strings.ReplaceAll(name, " ", "+")
 
 	return name
+}
+
+
+func FetchCover(url string, outputPath string) (error) {
+	// fmt.Println("Downloading image:", url, outputPath)
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	file, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.ReadFrom(resp.Body)
+	return err
 }
