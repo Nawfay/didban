@@ -1,4 +1,4 @@
-# Didban (دیدبان) – Music Fetching Library for Sorn
+# Didban – Music Fetching Library for Sorn
 
 **Didban** (Persian: دیدبان – *watchman*) is a Go library for downloading and tagging high-quality music tracks, built for integration into the **Sorn Music System**.
 
