@@ -2,8 +2,7 @@
 package main
 
 import (
-
-	"github/nawfay/didban/internal/downloader"
+	"github.com/nawfay/didban/internal/downloader"
 )
 
 type didban struct {
@@ -17,5 +16,3 @@ func NewClient(arl string) *didban {
 		ARL:    arl,
 	}
 }
-
-

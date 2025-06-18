@@ -2,12 +2,12 @@ package logic
 
 import (
 	"fmt"
-	"github/nawfay/didban/internal/utils"
+
+	"github.com/nawfay/didban/internal/utils"
 )
 
-
 func DeezerToYtResolver(deezerId int) (string, error) {
-	
+
 	song, err := FetchTrack(deezerId)
 	if err != nil {
 		return "", err
@@ -16,8 +16,6 @@ func DeezerToYtResolver(deezerId int) (string, error) {
 	ytquery := fmt.Sprintf(song.Title + " " + song.Artist.Name + " lyrics")
 	ytquery = utils.NormalizeString(ytquery)
 
-
-
 	ytString, err := SearchYouTube(ytquery, 1)
 	if err != nil {
 		return "", err
@@ -25,4 +23,3 @@ func DeezerToYtResolver(deezerId int) (string, error) {
 
 	return ytString[0], nil
 }
-

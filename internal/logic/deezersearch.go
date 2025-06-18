@@ -1,13 +1,12 @@
 package logic
 
-
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	
-	"github/nawfay/didban/internal/models"
+
+	"github.com/nawfay/didban/internal/models"
 )
 
 const DeezerApi = "https://api.deezer.com/"
@@ -16,7 +15,6 @@ func FetchTrack(id int) (*models.Track, error) {
 	// Construct the API URL
 	url := DeezerApi + "track/" + fmt.Sprint(id)
 	var trackResponse models.Track
-
 
 	// Perform the HTTP GET request
 	resp, err := http.Get(url)
@@ -39,4 +37,3 @@ func FetchTrack(id int) (*models.Track, error) {
 	// Return the tracks from the response
 	return &trackResponse, nil
 }
-
