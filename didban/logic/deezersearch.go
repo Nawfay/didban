@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"net/http"
 
+<<<<<<< HEAD:didban/logic/deezersearch.go
+	"github.com/nawfay/didban/didban/models"
+=======
 	"github.com/nawfay/didban/internal/models"
+>>>>>>> main:internal/logic/deezersearch.go
 )
 
 const DeezerApi = "https://api.deezer.com/"
 
-func FetchTrack(id int) (*models.Track, error) {
+func FetchTrack(id string) (*models.Track, error) {
 	// Construct the API URL
 	url := DeezerApi + "track/" + fmt.Sprint(id)
 	var trackResponse models.Track

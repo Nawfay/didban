@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nawfay/didban/internal/models"
-	"github.com/nawfay/didban/internal/utils"
+	"github.com/nawfay/didban/didban/models"
+	"github.com/nawfay/didban/didban/utils"
 
 	"golang.org/x/crypto/blowfish"
 )
@@ -82,6 +82,7 @@ func SetARLCookie(arl string) error {
 // DownloadTrack retrieves and decrypts a full Deezer track (FLAC/320/128).
 // trackID is the Deezer track ID; outputPath is the destination file.
 func DownloadTrackDeezer(track *models.Track, tmpPath string, trackPath string) (bool, error) {
+
 
 	// 1) fetch encrypted source URLs
 	media, err := getMediaURL(track)

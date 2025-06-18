@@ -3,7 +3,11 @@ package utils
 import (
 	"fmt"
 
+<<<<<<< HEAD:didban/utils/helper.go
+	"github.com/nawfay/didban/didban/models"
+=======
 	"github.com/nawfay/didban/internal/models"
+>>>>>>> main:internal/utils/helper.go
 
 	"net/http"
 	"os"
