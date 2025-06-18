@@ -83,6 +83,7 @@ func SetARLCookie(arl string) error {
 // trackID is the Deezer track ID; outputPath is the destination file.
 func DownloadTrackDeezer(track *models.Track, tmpPath string, trackPath string) (bool, error) {
 
+
 	// 1) fetch encrypted source URLs
 	media, err := getMediaURL(track)
 	if err != nil {

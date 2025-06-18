@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 package didban
 
 import (
@@ -24,6 +25,24 @@ func Init(arl string, tmpPath string) error {
 		YtClient: &youtube.Client{},
 		ARL:      arl,
 		TmpPath:  tmpPath,
+=======
+// main.go
+package didban
+
+import (
+	"github.com/nawfay/didban/internal/downloader"
+)
+
+type Didban struct {
+	Client *downloader.Client
+	ARL    string
+}
+
+func NewClient(arl string) *Didban {
+	return &Didban{
+		Client: downloader.NewYtClient(),
+		ARL:    arl,
+>>>>>>> main
 	}
 
 	// Set up ARL session (deezer cookie for downloading)
@@ -34,6 +53,7 @@ func Init(arl string, tmpPath string) error {
 
 	return nil
 }
+<<<<<<< HEAD
 
 
 func DownloadTracks(item models.QueueItem) error {
@@ -74,3 +94,5 @@ func DownloadTracks(item models.QueueItem) error {
 
 	return nil
 }
+=======
+>>>>>>> main

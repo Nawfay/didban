@@ -6,7 +6,11 @@ import (
 	"fmt"
 	"net/http"
 
+<<<<<<< HEAD:didban/logic/deezersearch.go
 	"github.com/nawfay/didban/didban/models"
+=======
+	"github.com/nawfay/didban/internal/models"
+>>>>>>> main:internal/logic/deezersearch.go
 )
 
 const DeezerApi = "https://api.deezer.com/"
