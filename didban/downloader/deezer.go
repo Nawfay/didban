@@ -14,12 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"github/nawfay/didban/internal/models"
-	"github/nawfay/didban/internal/utils"
+	"github.com/nawfay/didban/didban/models"
+	"github.com/nawfay/didban/didban/utils"
 
 	"golang.org/x/crypto/blowfish"
 )
-
 
 var Config = struct {
 	ARLCookie      string
@@ -32,7 +31,6 @@ var Config = struct {
 	BlowfishSecret: "g4el58wc0zvf9na1",
 	BlowfishIV:     "0001020304050607",
 }
-
 
 // fetchLicenseToken posts your ARL to Deezer and returns a fresh license_token + sid.
 func fetchLicenseToken(arl string) (licenseToken, sid string, err error) {
@@ -81,12 +79,10 @@ func SetARLCookie(arl string) error {
 	return nil
 }
 
-
-
 // DownloadTrack retrieves and decrypts a full Deezer track (FLAC/320/128).
 // trackID is the Deezer track ID; outputPath is the destination file.
 func DownloadTrackDeezer(track *models.Track, tmpPath string, trackPath string) (bool, error) {
-	
+
 	// 1) fetch encrypted source URLs
 	media, err := getMediaURL(track)
 	if err != nil {
@@ -125,7 +121,6 @@ func DownloadTrackDeezer(track *models.Track, tmpPath string, trackPath string) 
 	return true, nil
 
 }
-
 
 // getMediaURL posts to /v1/get_url with your license_token + track_token.
 func getMediaURL(song *models.Track) (*models.MediaResponse, error) {

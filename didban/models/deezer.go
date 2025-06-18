@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 
 type Track struct {
 	ID     int    `json:"id"`
@@ -46,4 +48,20 @@ type GetUserDataResponse struct {
 			} `json:"options"`
 		} `json:"user"`
 	} `json:"results"`
+}
+
+
+type QueueItem struct {
+	ID        uint `gorm:"primaryKey"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+
+	DeezerID string `gorm:"uniqueIndex"` // Unique to avoid duplicates
+	Title    string
+	Artist   string
+	Album    string
+	URL      string
+	Path     string
+	Youtube  bool
+	Status   string `gorm:"default:pending"` // pending, downloading, completed, failed
 }

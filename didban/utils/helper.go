@@ -2,7 +2,8 @@ package utils
 
 import (
 	"fmt"
-	"github/nawfay/didban/internal/models"
+
+	"github.com/nawfay/didban/didban/models"
 
 	"net/http"
 	"os"
@@ -30,8 +31,7 @@ func NormalizeString(name string) string {
 	return name
 }
 
-
-func FetchCover(url string, outputPath string) (error) {
+func FetchCover(url string, outputPath string) error {
 	// fmt.Println("Downloading image:", url, outputPath)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -49,8 +49,7 @@ func FetchCover(url string, outputPath string) (error) {
 	return err
 }
 
-
-func TagTrackWithMetadata(tmpPath string, trackPath string, id string, track *models.Track,) error {
+func TagTrackWithMetadata(tmpPath string, trackPath string, id string, track *models.Track) error {
 
 	coverPath := fmt.Sprintf("%s/%s.jpg", tmpPath, id)
 	err := FetchCover(track.Album.Cover, coverPath)
@@ -69,7 +68,6 @@ func TagTrackWithMetadata(tmpPath string, trackPath string, id string, track *mo
 	return nil
 }
 
-
 func GenerateTrackTitle(track *models.Track) string {
-    return fmt.Sprintf("%s - %s", track.Artist.Name, track.Title)
+	return fmt.Sprintf("%s - %s", track.Artist.Name, track.Title)
 }

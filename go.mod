@@ -1,4 +1,4 @@
-module github/nawfay/didban
+module github.com/nawfay/didban
 
 go 1.23.1
 
