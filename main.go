@@ -5,7 +5,7 @@ import (
 	"github.com/nawfay/didban/internal/downloader"
 )
 
-type didban struct {
+type Didban struct {
 	Client *downloader.Client
 	ARL    string
 }
