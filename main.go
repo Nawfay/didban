@@ -1,5 +1,5 @@
 // main.go
-package main
+package didban
 
 import (
 	"github.com/nawfay/didban/internal/downloader"
