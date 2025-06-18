@@ -1,17 +1,21 @@
+// main.go
 package main
 
 import (
-	// "github/nawfay/didban/internal/logic"
-	// "fmt"
 
 	"github/nawfay/didban/internal/downloader"
 )
 
-
-func main() {
-
-	// tmp, _ := logic.DeezerToYtResolver(3135556)
-	// fmt.Println(tmp)
-	
-	downloader.ExampleClient()
+type didban struct {
+	Client *downloader.Client
+	ARL    string
 }
+
+func NewClient(arl string) *didban {
+	return &didban{
+		Client: downloader.NewYtClient(),
+		ARL:    arl,
+	}
+}
+
+

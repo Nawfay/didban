@@ -19,13 +19,13 @@ type Client struct {
 	
 }
 
-func NewClient() *Client {
+func NewYtClient() *Client {
 	return &Client{
 		Client: youtube.Client{},
 	}
 }
 
-func DownloadVideoYt(client *Client, videoID string, tmpPath string, output string, track models.Track) (bool, error) {
+func DownloadTrackYt(client *Client, videoID string, tmpPath string, path string, track *models.Track) (bool, error) {
 
 	// Fetch video metadata
 	video, err := client.Client.GetVideo(videoID)
@@ -57,24 +57,16 @@ func DownloadVideoYt(client *Client, videoID string, tmpPath string, output stri
 		return false, fmt.Errorf("failed to write audio stream: %w", err)
 	}	
 
-	utils.ConvertToMP4(tmpFile, output, fmt.Sprintf("%d", video.Duration))
+	trackPath := fmt.Sprintf("%s/%s.mp3", path, utils.GenerateTrackTitle(track))
+
+	utils.ConvertToMP4(tmpFile, trackPath, fmt.Sprintf("%d", video.Duration))
 	os.Remove(tmpFile)
 
-	coverPath := fmt.Sprintf("%s/%s.jpg", tmpPath, videoID)
-	err = utils.FetchCover(track.Album.Cover, coverPath)
+	err = utils.TagTrackWithMetadata(tmpPath, trackPath, videoID, track)
 	if err != nil {
-		os.Remove(output)
-		os.Remove(coverPath)
-		return false, fmt.Errorf("failed to fetch cover image: %w", err)
-	}
-
-	err = utils.TagMP3(output, coverPath, track.Title, track.Artist.Name, track.Album.Title, fmt.Sprintf("%d", video.Duration))
-	if err != nil {
-		os.Remove(output)
-		os.Remove(coverPath)
+		os.Remove(trackPath)
 		return false, fmt.Errorf("failed to tag MP3: %w", err)
 	}
-	os.Remove(coverPath)
 
 	return true, nil
 }
@@ -86,10 +78,10 @@ func ExampleClient() {
 
 	fmt.Println("This is an example function for the Client struct.")
 
-	client := NewClient()
+	client := NewYtClient()
 	track, _ := logic.FetchTrack(77450636)
 	videoID, _ := logic.DeezerToYtResolver(77450636)
-	err1, err2 := DownloadVideoYt(client, videoID, "/home/nawaf/Documents/GitHub/didban/tmp", fmt.Sprintf("%s - %s.mp3", track.Title, track.Artist.Name), *track)
+	err1, err2 := DownloadTrackYt(client, videoID, "/home/nawaf/Documents/GitHub/didban/tmp", fmt.Sprintf("%s - %s.mp3", track.Title, track.Artist.Name), track)
 	
 	if err1 != false {
 		fmt.Println("Error downloading video:", err1)
