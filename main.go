@@ -10,8 +10,8 @@ type Didban struct {
 	ARL    string
 }
 
-func NewClient(arl string) *didban {
-	return &didban{
+func NewClient(arl string) *Didban {
+	return &Didban{
 		Client: downloader.NewYtClient(),
 		ARL:    arl,
 	}
