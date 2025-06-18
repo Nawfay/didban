@@ -1,6 +1,9 @@
 package utils
 
 import (
+	"fmt"
+	"github/nawfay/didban/internal/models"
+
 	"net/http"
 	"os"
 	"regexp"
@@ -44,4 +47,29 @@ func FetchCover(url string, outputPath string) (error) {
 
 	_, err = file.ReadFrom(resp.Body)
 	return err
+}
+
+
+func TagTrackWithMetadata(tmpPath string, trackPath string, id string, track *models.Track,) error {
+
+	coverPath := fmt.Sprintf("%s/%s.jpg", tmpPath, id)
+	err := FetchCover(track.Album.Cover, coverPath)
+	if err != nil {
+		os.Remove(coverPath)
+		return fmt.Errorf("failed to fetch cover image: %w", err)
+	}
+
+	err = TagMP3(trackPath, coverPath, track.Title, track.Artist.Name, track.Album.Title, fmt.Sprintf("%d", track.Duration))
+	if err != nil {
+		os.Remove(coverPath)
+		return fmt.Errorf("failed to tag MP3: %w", err)
+	}
+	os.Remove(coverPath)
+
+	return nil
+}
+
+
+func GenerateTrackTitle(track *models.Track) string {
+    return fmt.Sprintf("%s - %s", track.Artist.Name, track.Title)
 }
