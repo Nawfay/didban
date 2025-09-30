@@ -18,6 +18,9 @@ type State struct {
 
 var appState *State
 
+// Init initializes the didban library with the required ARL cookie and temporary path.
+// arl: Deezer ARL cookie for authentication
+// tmpPath: Temporary directory path for processing files
 func Init(arl string, tmpPath string) error {
 	// Set global state
 	appState = &State{
@@ -27,15 +30,15 @@ func Init(arl string, tmpPath string) error {
 	}
 
 	// Set up ARL session (deezer cookie for downloading)
-	if err := downloader.SetARLCookie(arl) 
-	err != nil {
+	if err := downloader.SetARLCookie(arl); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-
+// DownloadTracks downloads a track based on the provided QueueItem.
+// It supports both Deezer and YouTube sources depending on the item configuration.
 func DownloadTracks(item models.QueueItem) error {
 	if item.Youtube && item.DeezerID != "" {
 		track, err := logic.FetchTrack(item.DeezerID)
@@ -47,7 +50,7 @@ func DownloadTracks(item models.QueueItem) error {
 		if err != nil {
 			return err
 		}
-		
+
 		finished, err := downloader.DownloadTrackYt(appState.YtClient, youtubeId, appState.TmpPath, item.Path, track)
 		if err != nil {
 			return err
